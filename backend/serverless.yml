@@ -5,6 +5,7 @@ provider:
   region: us-east-1
   environment:
     TABLE_NAME: "AuthUsers"
+    BUCKET_NAME: "authwave-profile-images"
   iamRoleStatements: # Grant permissions to Lambda
     - Effect: Allow
       Action:
@@ -16,6 +17,12 @@ provider:
         - dynamodb:Query
       Resource:
         - arn:aws:dynamodb:us-east-1:${aws:accountId}:table/AuthUsers
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+        - s3:DeleteObject
+      Resource: "arn:aws:s3:::authwave-profile-images/*"
 
 functions:
   app:
@@ -39,3 +46,24 @@ resources:
           - AttributeName: email
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
+    ProfileImagesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: authwave-profile-images
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - "*" # Can be restricted later
+              AllowedMethods:
+                - GET
+                - PUT
+                - POST
+                - DELETE
+              AllowedHeaders:
+                - "*"
+              MaxAge: 3000
