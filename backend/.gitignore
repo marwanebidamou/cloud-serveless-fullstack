@@ -1,0 +1,44 @@
+# Node Modules
+node_modules/
+package-lock.json
+
+# TypeScript Build Files
+dist/
+*.js
+*.js.map
+
+# Environment Variables
+.env
+
+# AWS Credentials & Secrets
+.aws/
+.aws-sam/
+
+# Serverless Framework Artifacts
+.serverless/
+.yarn/
+.npm/
+
+# Logs & Debug Files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# VS Code Settings
+.vscode/
+
+# MacOS System Files
+.DS_Store
+
+# AWS Lambda Layer Cache (If using layers)
+__pycache__/
+*.pyc
+
+# Temporary Files
+tmp/
+*.swp
+
+# Ignore test coverage reports (if using Jest)
+coverage/
