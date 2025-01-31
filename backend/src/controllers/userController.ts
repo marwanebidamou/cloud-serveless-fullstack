@@ -52,7 +52,7 @@ const getUploadUrl = async (req: AuthRequest, res: Response, next: NextFunction)
         const params = {
             Bucket: BUCKET_NAME,
             Key: fileName,
-            Expires: 60,
+            Expires: 360,
             ContentType: "image/jpeg",
         };
 
