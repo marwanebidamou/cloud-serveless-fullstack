@@ -1,18 +1,11 @@
 import AWS from "aws-sdk";
+import { User } from "../model/user.model";
 
 AWS.config.update({ region: "us-east-1" });
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 const TABLE_NAME = "AuthUsers";
 
-interface User {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    occupation: string;
-    password: string;
-    profileImageUrl: string;
-}
+
 
 const saveUser = async (user: User): Promise<void> => {
     const params = {
