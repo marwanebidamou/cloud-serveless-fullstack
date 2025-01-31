@@ -12,4 +12,8 @@ router.post("/auth/login", authController.login);
 // User Routes
 router.get("/profile", authMiddleware, userController.getProfile);
 
+router.get("/profile/upload-url", authMiddleware, userController.getUploadUrl);
+
+router.put("/profile", authMiddleware, userController.updateProfile);
+
 export default router;
