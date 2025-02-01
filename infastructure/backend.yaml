@@ -1,0 +1,327 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  SourceCodeS3BucketName:
+    Type: String
+    Description: "Enter the name of the S3 bucket where the backend source code is stored.\nExample: backend-sourcecode-bucket"
+    # default: "backend-sourcecode-bucket"
+
+  SourceCodeS3BucketARN:
+    Type: String
+    Description: "Enter the ARN of the S3 bucket where the backend source code is stored.\nExample: arn:aws:s3:::backend-sourcecode-bucket"
+    # default: "arn:aws:s3:::backend-sourcecode-bucket"
+
+  SourceCodeZipFile:
+    Type: String
+    Description: "Enter the zip file where the backend source code is stored.\nExample: backend-source-code.zip"
+    # default: "backend-source-code.zip"
+
+  ProfilePictureS3BucketName:
+    Type: String
+    Description: "Enter the name of the S3 bucket where the profile picture will be stored.\nExample: user-profile-photos-bucket-${AWS::AccountId}"
+    # default: "user-profile-photos-bucket-${AWS::AccountId}"
+
+  EmailAddress:
+    Type: String
+    Description: "Enter email address for the SNS topic.\nExample: user@example.com"
+    # default: "user@example.com"
+
+Resources:
+  # S3 Bucket for User Profile Photos
+  UserProfileBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref ProfilePictureS3BucketName #user-profile-photos-bucket--${AWS::AccountId} # Replace with a unique name
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - "*" # Replace with specific domains if needed (e.g., "https://example.com")
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedHeaders:
+              - "*" # Allows all headers; restrict if necessary
+            ExposedHeaders:
+              - "x-amz-request-id"
+              - "x-amz-id-2"
+            MaxAge: 3000 # Cache duration for preflight requests
+
+  # DynamoDB Table for Authentication
+  AuthUsersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AuthUsers
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # SNS Topic for User Notifications
+  UserNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: UserNotifications
+
+  # Email Subscription for SNS
+  SnsEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref UserNotificationTopic
+      Protocol: email
+      Endpoint: !Ref EmailAddress #user@example.com # Replace with the actual email
+
+  # IAM Role for Lambda with Full Access to S3, SNS, and DynamoDB
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: UserAuthLambdaRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: FullAccessToS3SNSDynamoDB
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: !Sub "arn:aws:s3:::${UserProfileBucket}/*"
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Ref SourceCodeS3BucketARN # User-provided ARN #"arn:aws:s3:::backend-sourcecode-bucket/*" # Replace with the arn of the actual bucket to get the source code
+              - Effect: Allow
+                Action:
+                  - sns:*
+                Resource: !Ref UserNotificationTopic
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: !GetAtt AuthUsersTable.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  # Lambda Function for User Authentication
+  AuthLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: UserAuthFunction
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref SourceCodeS3BucketName #backend-sourcecode-bucket # Replace with actual bucket name to get the source code
+        S3Key: !Ref SourceCodeZipFile #backend-source-code.zip # Replace with actual ZIP file
+      Timeout: 10
+      MemorySize: 512
+
+  # API Gateway
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: UserAuthAPI
+      Description: API Gateway for User Authentication
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  ##########################################
+
+  # API Gateway Resources
+  ApiGatewayAuthResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: auth
+
+  ApiGatewayLoginResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref ApiGatewayAuthResource
+      PathPart: login
+
+  ApiGatewaySignupResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref ApiGatewayAuthResource
+      PathPart: signup
+
+  ApiGatewayProfileResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: profile
+
+  ApiGatewayUploadUrlResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref ApiGatewayProfileResource
+      PathPart: upload-url
+
+  # API Gateway Methods
+  ApiGatewayMethodsSignup:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewaySignupResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Methods: "'POST, OPTIONS'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type, Authorization'"
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  # API Gateway Methods
+  ApiGatewayMethodsLogin:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayLoginResource # FIXED: Using correct resource ID
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Methods: "'POST, OPTIONS'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type, Authorization'"
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  ApiGatewayMethodsProfileGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayProfileResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Methods: "'POST, OPTIONS'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type, Authorization'"
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  ApiGatewayMethodsProfilePatch:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayProfileResource
+      HttpMethod: PATCH
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Methods: "'POST, OPTIONS'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type, Authorization'"
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  ApiGatewayMethodsUploadUrl:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref ApiGatewayUploadUrlResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
+      MethodResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Methods: "'POST, OPTIONS'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type, Authorization'"
+        - StatusCode: 400
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+        - StatusCode: 500
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+
+  # API Gateway Deployment
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - ApiGatewayMethodsSignup
+      - ApiGatewayMethodsLogin
+      - ApiGatewayMethodsProfileGet
+      - ApiGatewayMethodsProfilePatch
+      - ApiGatewayMethodsUploadUrl
+    Properties:
+      RestApiId: !Ref ApiGateway
+      StageName: api
+
+  # API Gateway Invocation Permission for Lambda
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AuthLambdaFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
+
+Outputs:
+  ApiGatewayInvokeURL:
+    Description: API Gateway Invoke URL
+    Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/api"
