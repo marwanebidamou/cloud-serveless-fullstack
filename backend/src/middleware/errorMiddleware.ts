@@ -10,7 +10,8 @@ const errorMiddleware = (err: Error, req: Request, res: Response, next: NextFunc
         message = err.message;
     }
 
-    console.error(`[ERROR] ${req.method} ${req.path} - ${message}`);
+    console.error(`[ERROR] ${req.method} ${req.path} - ${message}`, err);
+
 
     res.status(statusCode).json({
         success: false,
