@@ -25,19 +25,24 @@ const getUserByEmail = async (email: string): Promise<User | null> => {
     return result.Item as User | null;
 };
 
-const updateUserProfile = async (email: string, updates:
-    {
+
+const updateUserProfile = async (
+    email: string,
+    updates: {
         name?: string;
         profileImageUrl?: string;
         phone?: string;
         address?: string;
         occupation?: string;
-    }) => {
+    }
+) => {
     const updateExpression: string[] = [];
     const expressionAttributeValues: Record<string, any> = {};
+    const expressionAttributeNames: Record<string, string> = {};
 
     if (updates.name) {
-        updateExpression.push("name = :name");
+        updateExpression.push("#name = :name");
+        expressionAttributeNames["#name"] = "name"; // Escape the reserved keyword
         expressionAttributeValues[":name"] = updates.name;
     }
     if (updates.profileImageUrl) {
@@ -61,7 +66,7 @@ const updateUserProfile = async (email: string, updates:
         throw new AppError("At least one field (name or profileImageUrl) is required", 400);
     }
 
-    const params = {
+    const params: AWS.DynamoDB.DocumentClient.UpdateItemInput = {
         TableName: TABLE_NAME,
         Key: { email },
         UpdateExpression: `SET ${updateExpression.join(", ")}`,
@@ -69,9 +74,13 @@ const updateUserProfile = async (email: string, updates:
         ReturnValues: "ALL_NEW",
     };
 
+    // Only add ExpressionAttributeNames if it's not empty
+    if (Object.keys(expressionAttributeNames).length > 0) {
+        params.ExpressionAttributeNames = expressionAttributeNames;
+    }
+
     const result = await dynamoDB.update(params).promise();
     return result.Attributes;
 };
-
 
 export default { saveUser, getUserByEmail, updateUserProfile };
