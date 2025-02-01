@@ -80,3 +80,5 @@ resources:
               Principal: "*"
               Action: "s3:GetObject"
               Resource: "arn:aws:s3:::authwave-profile-images/*"
+plugins:
+  - serverless-offline

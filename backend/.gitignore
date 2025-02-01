@@ -42,3 +42,6 @@ tmp/
 
 # Ignore test coverage reports (if using Jest)
 coverage/
+
+
+undefined
