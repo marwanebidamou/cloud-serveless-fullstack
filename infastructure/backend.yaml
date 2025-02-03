@@ -18,7 +18,9 @@ Parameters:
     Description: "Enter an email address for SNS notifications."
 
 Resources:
-  # ✅ S3 Bucket for Profile Pictures (Ensures Uniqueness)
+  # ----------------------------------------------------------------------------
+  # 1) S3 Bucket for Profile Pictures
+  # ----------------------------------------------------------------------------
   UserProfileBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -31,7 +33,9 @@ Resources:
             ExposedHeaders: ["x-amz-request-id", "x-amz-id-2"]
             MaxAge: 3000
 
-  # ✅ DynamoDB Table for Authentication (Ensures Uniqueness)
+  # ----------------------------------------------------------------------------
+  # 2) DynamoDB Table for Authentication
+  # ----------------------------------------------------------------------------
   AuthUsersTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -44,7 +48,9 @@ Resources:
           KeyType: HASH
       BillingMode: PAY_PER_REQUEST
 
-  # ✅ IAM Role for Lambda Execution
+  # ----------------------------------------------------------------------------
+  # 3) IAM Role for Lambda Execution
+  # ----------------------------------------------------------------------------
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -65,10 +71,12 @@ Resources:
                 Action:
                   - s3:*
                 Resource: !Sub "arn:aws:s3:::authwave-profile-images-${AWS::AccountId}-${AWS::Region}/*"
+
               - Effect: Allow
                 Action:
                   - dynamodb:*
                 Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/AuthUsers-${AWS::AccountId}-${AWS::Region}"
+
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
@@ -76,12 +84,14 @@ Resources:
                   - logs:PutLogEvents
                 Resource: "*"
 
-  # ✅ AWS Lambda Function
+  # ----------------------------------------------------------------------------
+  # 4) AWS Lambda Function
+  # ----------------------------------------------------------------------------
   AuthLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: UserAuthFunction
-      Handler: index.handler # ✅ Updated to match index.js
+      Handler: index.handler # index.ts => compiled to index.js => "index.handler"
       Runtime: nodejs18.x
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
@@ -94,7 +104,9 @@ Resources:
           BUCKET_NAME: !Sub "authwave-profile-images-${AWS::AccountId}-${AWS::Region}"
           TABLE_NAME: !Sub "AuthUsers-${AWS::AccountId}-${AWS::Region}"
 
-  # ✅ API Gateway
+  # ----------------------------------------------------------------------------
+  # 5) API Gateway (Regional Endpoint)
+  # ----------------------------------------------------------------------------
   ApiGateway:
     Type: AWS::ApiGateway::RestApi
     Properties:
@@ -103,45 +115,45 @@ Resources:
       EndpointConfiguration:
         Types: ["REGIONAL"]
 
-  # ✅ API Gateway Base Path (/api)
-  ApiGatewayRootResource:
+  # ----------------------------------------------------------------------------
+  # 6) Single Catch-All Proxy Resource {proxy+}
+  # ----------------------------------------------------------------------------
+  ApiGatewayProxyResource:
     Type: AWS::ApiGateway::Resource
     Properties:
       RestApiId: !Ref ApiGateway
       ParentId: !GetAtt ApiGateway.RootResourceId
-      PathPart: "api" # ✅ Fix: Ensures a valid API path part
+      PathPart: "{proxy+}" # This is the wildcard catch-all
 
-  # ✅ API Gateway /auth Route
-  ApiGatewayAuthResource:
-    Type: AWS::ApiGateway::Resource
-    Properties:
-      RestApiId: !Ref ApiGateway
-      ParentId: !Ref ApiGatewayRootResource
-      PathPart: "auth"
-
-  # ✅ API Gateway ANY Method (Handles All Requests)
-  ApiGatewayMethodAny:
+  # ----------------------------------------------------------------------------
+  # 7) ANY Method for the Proxy Resource
+  # ----------------------------------------------------------------------------
+  ApiGatewayMethodProxyAny:
     Type: AWS::ApiGateway::Method
     Properties:
       RestApiId: !Ref ApiGateway
-      ResourceId: !Ref ApiGatewayRootResource
+      ResourceId: !Ref ApiGatewayProxyResource
       HttpMethod: ANY
       AuthorizationType: NONE
       Integration:
-        Type: AWS_PROXY
         IntegrationHttpMethod: POST
+        Type: AWS_PROXY
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthLambdaFunction.Arn}/invocations"
 
-  # ✅ API Gateway Deployment (Stage changed to `prod`)
+  # ----------------------------------------------------------------------------
+  # 8) Deployment & Stage (prod)
+  # ----------------------------------------------------------------------------
   ApiGatewayDeployment:
     Type: AWS::ApiGateway::Deployment
     DependsOn:
-      - ApiGatewayMethodAny
+      - ApiGatewayMethodProxyAny
     Properties:
       RestApiId: !Ref ApiGateway
-      StageName: prod # ✅ Stage changed to `prod`
+      StageName: prod
 
-  # ✅ API Gateway Invocation Permission for Lambda
+  # ----------------------------------------------------------------------------
+  # 9) Permission for API Gateway to Invoke Lambda
+  # ----------------------------------------------------------------------------
   LambdaInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -151,7 +163,6 @@ Resources:
       SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
 
 Outputs:
-  # ✅ Correctly references ApiGateway in Outputs
   ApiGatewayInvokeURL:
-    Description: "API Gateway Invoke URL"
+    Description: "API Gateway Invoke URL (prod stage)"
     Value: !Sub "https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod"
