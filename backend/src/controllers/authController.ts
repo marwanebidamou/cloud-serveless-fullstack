@@ -6,7 +6,7 @@ import { JWT_SECRET } from "../config";
 
 
 const signup = async (req: Request, res: Response) => {
-    const { email, password, name, phone, address, occupation } = req.body;
+    const { email, password, name, phone, address, occupation, profileImageUrl } = req.body;
     if (!email || !password || !name) {
         res.status(400).json({ message: "Please provide name, email, and password." });
         return;
@@ -26,7 +26,7 @@ const signup = async (req: Request, res: Response) => {
         address,
         occupation,
         password: hashedPassword,
-        profileImageUrl: "",
+        profileImageUrl,
     };
 
     await userService.saveUser(newUser);

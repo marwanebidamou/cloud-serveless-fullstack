@@ -3,7 +3,6 @@ import userService from "../services/userService";
 import { AppError } from "../utils/AppError";
 import AWS from "aws-sdk";
 import { BUCKET_NAME } from "../config";
-
 // Extend Request interface to include 'user'
 interface AuthRequest extends Request {
     user?: { email: string };
@@ -40,14 +39,10 @@ const getProfile = async (req: AuthRequest, res: Response, next: NextFunction): 
 const s3 = new AWS.S3();
 
 
-const getUploadUrl = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+const getUploadUrl = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        if (!req.user) {
-            throw new AppError("Unauthorized", 401);
-        }
-
-        // Generate unique filename using email and timestamp
-        const fileName = `profile-${req.user.email}-${Date.now()}.jpg`;
+        // Generate unique filename
+        const fileName = `${getRandomFileName()}.jpg`;
 
         const params = {
             Bucket: BUCKET_NAME,
@@ -87,5 +82,11 @@ const updateProfile = async (req: AuthRequest, res: Response, next: NextFunction
     }
 };
 
+function getRandomFileName() {
+    var timestamp = new Date().toISOString().replace(/[-:.]/g, "");
+    var random = ("" + Math.random()).substring(2, 8);
+    var random_number = timestamp + random;
+    return random_number;
+}
 
 export default { getProfile, getUploadUrl, updateProfile };
