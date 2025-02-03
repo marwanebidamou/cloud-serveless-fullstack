@@ -1,10 +1,10 @@
 import AWS from "aws-sdk";
 import { User } from "../model/user.model";
 import { AppError } from "../utils/AppError";
+import { TABLE_NAME } from "../config";
 
 AWS.config.update({ region: "us-east-1" });
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
-const TABLE_NAME = "AuthUsers";
 
 
 
