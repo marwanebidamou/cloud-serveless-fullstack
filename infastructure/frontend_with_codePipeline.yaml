@@ -99,6 +99,62 @@ Resources:
                   - iam:PassRole
                 Resource: "*"
 
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CodeBuildServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                  - logs:*
+                  - cloudfront:CreateInvalidation
+                Resource: "*"
+
+  FrontendBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: FrontendBuildProject
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:5.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: NODE_ENV
+            Value: production
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              commands:
+                - echo Installing dependencies...
+                - cd frontend
+                - npm install
+            build:
+              commands:
+                - echo Build started on `date`
+                - npm run build
+          artifacts:
+            files:
+              - '**/*'
+            base-directory: frontend/build
+
   FrontendPipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
@@ -134,7 +190,7 @@ Resources:
                 Provider: CodeBuild
                 Version: "1"
               Configuration:
-                ProjectName: FrontendBuildProject
+                ProjectName: !Ref FrontendBuildProject
               InputArtifacts:
                 - Name: SourceArtifact
               OutputArtifacts:
