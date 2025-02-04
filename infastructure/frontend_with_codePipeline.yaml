@@ -12,6 +12,10 @@ Parameters:
     Type: String
     Description: "GitHub repository branch. Example: main"
     # Default: main
+  BackendBaseUrl:
+    Type: String
+    Description: "Backend base url. Example: https://xxxx.execute-api.us-east-1.amazonaws.com/prod"
+    # Default: https://xxxx.execute-api.us-east-1.amazonaws.com/prod
 
 Resources:
   WebsiteBucket:
@@ -136,6 +140,8 @@ Resources:
         EnvironmentVariables:
           - Name: NODE_ENV
             Value: production
+          - Name: REACT_APP_BASE_URL
+            Value: !Ref BackendBaseUrl
       Source:
         Type: CODEPIPELINE
         BuildSpec: |
