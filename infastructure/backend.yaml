@@ -19,12 +19,17 @@ Parameters:
 
 Resources:
   # ----------------------------------------------------------------------------
-  # 1) S3 Bucket for Profile Pictures
+  # 1.1) S3 Bucket for Profile Pictures
   # ----------------------------------------------------------------------------
   UserProfileBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "authwave-profile-images-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
       CorsConfiguration:
         CorsRules:
           - AllowedOrigins: ["*"]
@@ -32,6 +37,22 @@ Resources:
             AllowedHeaders: ["*"]
             ExposedHeaders: ["x-amz-request-id", "x-amz-id-2"]
             MaxAge: 3000
+
+  # ---------------------------------------------------
+  # 1.2) Bucket Policy to Allow Public Read of Objects
+  # ---------------------------------------------------
+  UserProfileBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UserProfileBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowPublicRead"
+            Effect: "Allow"
+            Principal: "*"
+            Action: "s3:GetObject"
+            Resource: !Sub "${UserProfileBucket.Arn}/*"
 
   # ----------------------------------------------------------------------------
   # 2) DynamoDB Table for Authentication
